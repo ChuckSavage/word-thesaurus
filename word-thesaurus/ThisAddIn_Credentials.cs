@@ -10,7 +10,7 @@
          *     User ID: NNNN
          *     Token: ZZZZZZZZZZZ
          */
-		private string uid = "NNNN"; // Numeric id
-		private string key = "XXXXXXXXXXXXXX"; // Looks like fEJNjkm5mHNWE7LWs
+		private string uid = "5728"; // Numeric id
+		private string key = "PjccOW2zuuFhjF6A"; // Looks like fEJNjkm5mHNWE7LWs
 	}
 }
