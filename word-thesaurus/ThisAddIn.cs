@@ -23,6 +23,7 @@
 
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Xml.Linq;
@@ -41,21 +42,48 @@ namespace word_thesaurus
 		const string NO_INTERNET = "_ No Internet _";
 
 		private Word.Application app;
-		private Office.CommandBar commandBar;
+		//private Office.CommandBar commandBar;
 		private Office.CommandBarPopup popup;
 		Word.Range range;
 		ArrayList menus = new ArrayList();
+		List<int> temp = new List<int>();
+		List<Office.CommandBar> textBars = new List<Office.CommandBar>();
 
 		UriBuilder uri;
 		string uritokens;
 		SortedList lookup = new SortedList();
-		OrderedList<string> words;
+		OrderedList<string> words = new OrderedList<string>();
 
 		private void ThisAddIn_Startup(object sender, System.EventArgs e)
 		{
 			app = this.Application;
 			app.WindowBeforeRightClick += new Word.ApplicationEvents4_WindowBeforeRightClickEventHandler(app_WindowBeforeRightClick);
-			commandBar = app.CommandBars["Text"];
+			// Get all bars, order by name for developer reference
+			//words.Add(app.CommandBars.Cast<Office.CommandBar>()
+			//	.Select(c => c.Name));
+
+			bool txtadded = false;
+			foreach (var bar in app.CommandBars)
+			{
+				var cmd = (Office.CommandBar)bar;
+				switch (cmd.Name)
+				{
+					case "Text":           // Normal context-menu
+					case "Spelling":       // Spelling context-menu
+					case "Track Changes":  // Track changes context-menu
+						if (cmd.Name == "Text") // There are two Text bars
+						{                       // We only need one, using the first
+							if (txtadded)
+								continue;
+							txtadded = true;
+						}
+						textBars.Add(cmd);
+						break;
+					default:
+						continue;
+				}
+				//System.Diagnostics.Debug.WriteLine(cmd.Name);
+			}
 
 			uri = new UriBuilder();
 			uri.Scheme = "http";
@@ -67,9 +95,9 @@ namespace word_thesaurus
 		private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
 		{
 			app.WindowBeforeRightClick -= new Word.ApplicationEvents4_WindowBeforeRightClickEventHandler(app_WindowBeforeRightClick);
-			if (null != popup)
-				popup.Delete();
-			commandBar.Delete();
+			// these seem to always throw an exception
+			//RemovePopup();
+			//commandBar.Delete();
 		}
 
 		public void app_WindowBeforeRightClick(Word.Selection selection, ref bool Cancel)
@@ -121,7 +149,7 @@ namespace word_thesaurus
 					return new string[] { NO_INTERNET }; // display message
 				throw;
 			}
-			words = new OrderedList<string>(null, false, false);
+			words = new OrderedList<string>();
 			// See comment at end of file for XML result returned by web service
 			// Add synonyms to words list, sorting and ignoring duplicates
 			words.Add(
@@ -151,7 +179,8 @@ namespace word_thesaurus
 				button.Delete();
 			}
 			menus.Clear();
-			commandBar.Reset();
+			textBars.ForEach(b => b.Reset());
+			//commandBar.Reset();
 		}
 
 		public void AddMenu(string[] words)
@@ -162,37 +191,32 @@ namespace word_thesaurus
 			// A search that returns nothing will have one empty result
 			addmenu &= !(words.Length == 1 && string.IsNullOrWhiteSpace(words[0]));
 
-			try
+			foreach (var commandBar in textBars)
 			{
-				if (null != popup)
-					popup.Delete();
-			}
-			catch { }
+				//RemovePopup();
+				popup = (Office.CommandBarPopup)commandBar.Controls.Add(Office.MsoControlType.msoControlPopup, missing, missing, 1, false); // the 1 here is where in context menu the popup will appear, apparently 1 is min value
+				popup.accName = "Theasurus";
+				popup.Tag = "Theasurus";
+				popup.Visible = addmenu;
 
-			popup = (Office.CommandBarPopup)commandBar.Controls.Add(Office.MsoControlType.msoControlPopup, missing, missing, 1, false);
-			popup.accName = "Theasurus";
-			popup.Tag = "Theasurus";
-			popup.Visible = addmenu;
-
-			foreach (string word in words)
-			{
-				if (string.IsNullOrWhiteSpace(word)) continue;
-				string w = word.Trim();
-				var button = (Office.CommandBarButton)popup.Controls.Add(Office.MsoControlType.msoControlButton, missing, missing, popup.Controls.Count + 1, false);
-				button.Caption = w;
-				button.Tag = w;
-				button.Visible = true;
-				button.Click += new Office._CommandBarButtonEvents_ClickEventHandler(button_Click);
-				menus.Add(button);
+				foreach (string word in words)
+				{
+					if (string.IsNullOrWhiteSpace(word)) continue;
+					string w = word.Trim();
+					var button = (Office.CommandBarButton)popup.Controls.Add(Office.MsoControlType.msoControlButton, missing, missing, popup.Controls.Count + 1, false);
+					button.Caption = w;
+					button.Tag = w;
+					button.Visible = true;
+					button.Click += new Office._CommandBarButtonEvents_ClickEventHandler(button_Click);
+					menus.Add(button);
+				}
 			}
 		}
 
 		public void ShowMenu(string query)
 		{
-			if (commandBar.Controls.Count > 0)
-			{
-				RemoveMenu();
-			}
+			//if (menus.Count > 0)
+			RemoveMenu();
 			string[] words = Request(query.ToLowerInvariant());
 			AddMenu(words);
 		}
@@ -203,6 +227,15 @@ namespace word_thesaurus
 				range.Text = ctrl.Tag;
 		}
 
+		void RemovePopup()
+		{
+			try
+			{
+				if (null != popup)
+					popup.Delete();
+			}
+			catch { }
+		}
 
 		#region VSTO generated code
 
